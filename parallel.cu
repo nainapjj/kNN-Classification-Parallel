@@ -5,6 +5,10 @@
 #include <fstream>
 #include <ctime>
 
+#include <cuda.h>
+#include <cuda_runtime.h>
+#include <cuda_runtime_api.h>
+
 #define MAX 10
 #define MIN 0
 
