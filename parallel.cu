@@ -182,4 +182,14 @@ int main() {
     normalize<<<numBlocks, threadsPerBlock>>>(d_unknowns, d_max, d_min, 
         numAttributes, numUnknowns);
     
+    cudaMemcpy(h_unknowns, d_unknowns, sizeof(double) * numUnknowns * numAttributes, cudaMemcpyDeviceToDevice);
+    
+    for (int i = 0; i < 5; i++) {
+        printf("%d ", h_unknowns[i]); 
+    }
+    printf("\n");
+
+
+
+    //findDistance<<<numBlocks, threadsPerBlock>>>(d_unknowns, 
 }
