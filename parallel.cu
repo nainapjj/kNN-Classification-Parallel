@@ -1,3 +1,10 @@
+#include <stdio.h>
+#include <algorithm>
+#include <cmath>
+#include <iostream>
+#include <fstream>
+#include <ctime>
+
 #define MAX 10
 #define MIN 0
 
@@ -23,7 +30,7 @@ __global__ void findDistance(double *d_inputNormal, double *d_inputSample,  doub
 
 }
 
-__global__ void block_sum(double *input, double *results, size_t n)
+/*__global__ void block_sum(double *input, double *results, size_t n)
 {
     extern __shared__ float sdata[];
     int i = threadIdx.x + blockDim.x*blockIdx.x;
@@ -48,7 +55,7 @@ __global__ void block_sum(double *input, double *results, size_t n)
     if(tx == 0) {
         results[blockIdx.x] = 
     }
-}
+}*/
 
 void parse(int* numAttributes, int* numKnownSamples, int* numClass, int *numUnknowns,
     double ** min, double ** max, double *** knowns, int ** classifications, 
