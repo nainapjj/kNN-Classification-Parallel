@@ -4,12 +4,15 @@
 #include <iostream>
 #include <fstream>
 #include <ctime>
+#include <string>
 
 #define MAX 10
 #define MIN 0
 
 #define FILE_NAME "small12345.txt"
 #define K 2
+
+using namespace std;
 
 __global__ void normalize(double * d_input, double *d_max, double *d_min, unsigned int numAttributes, 
     unsigned int numElems) {
@@ -58,8 +61,8 @@ __global__ void findDistance(double *d_inputNormal, double *d_inputSample,  doub
 }*/
 
 void parse(int* numAttributes, int* numKnownSamples, int* numClass, int *numUnknowns,
-    double ** min, double ** max, double *** knowns, int ** classifications, 
-    double *** unknowns, string** unknownNames)
+    double ** min, double ** max, double ** knowns, int ** classifications, 
+    double ** unknowns, string** unknownNames)
 {
     ifstream myfile(FILE_NAME, ios::in);  // declare and open
     
