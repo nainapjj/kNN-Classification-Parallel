@@ -156,33 +156,30 @@ int main() {
         &h_min, &h_max, &h_knowns, &h_classifications, &h_unknowns, &unknownNames);
     
     // Start mallocing the data to the kernel
-    checkCudaErrors(cudaMalloc(&d_min, sizeof(double) * numAttributes));
-    checkCudaErrors(cudaMalloc(&d_max, sizeof(double) * numAttributes));
-    checkCudaErrors(cudaMalloc(&d_knowns, sizeof(double) * numKnownSamples * numAttributes));
-    checkCudaErrors(cudaMalloc(&d_unknowns, sizeof(double) * numUnknowns * numAttributes));
-    checkCudaErrors(cudaMalloc(&d_classifications, sizeof(int) * numKnownSamples));
+    cudaMalloc(&d_min, sizeof(double) * numAttributes);
+    cudaMalloc(&d_max, sizeof(double) * numAttributes);
+    cudaMalloc(&d_knowns, sizeof(double) * numKnownSamples * numAttributes);
+    cudaMalloc(&d_unknowns, sizeof(double) * numUnknowns * numAttributes);
+    cudaMalloc(&d_classifications, sizeof(int) * numKnownSamples);
     
     // Copy the data from the host to the kernel
-    checkCudaErrors(cudaMemcpy(d_min, h_min, sizeof(double) * numAttributes, cudaMemcpyHostToDevice));
-    checkCudaErrors(cudaMemcpy(d_max, h_max, sizeof(double) * numAttributes, cudaMemcpyHostToDevice));
-    checkCudaErrors(cudaMemcpy(d_knowns, h_knowns, sizeof(double) * numKnownSamples * numAttributes, cudaMemcpyHostToDevice));
-    checkCudaErrors(cudaMemcpy(d_unknowns, h_unknowns, sizeof(double) * numUnknowns * numAttributes, cudaMemcpyHostToDevice));
-    checkCudaErrors(cudaMemcpy(d_classifications, h_classifications, sizeof(int) * numKnownSamples, cudaMemcpyHostToDevice));
+    cudaMemcpy(d_min, h_min, sizeof(double) * numAttributes, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_max, h_max, sizeof(double) * numAttributes, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_knowns, h_knowns, sizeof(double) * numKnownSamples * numAttributes, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_unknowns, h_unknowns, sizeof(double) * numUnknowns * numAttributes, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_classifications, h_classifications, sizeof(int) * numKnownSamples, cudaMemcpyHostToDevice);
 
     
     // Normalize the known values
-    unsigned int threadsPerBlock = 256;
-    unsigned int numBlocks = numAttributes * numKnownSamples / threadsPerBlock;
+    threadsPerBlock = 256;
+    numBlocks = numAttributes * numKnownSamples / threadsPerBlock;
     normalize<<<numBlocks, threadsPerBlock>>>(d_knowns, d_max, d_min, 
-        numAttributes, numElems);
+        numAttributes, numKnownSamples);
     
     // Normalize the unknown values
-    unsigned int threadsPerBlock = 256;
-    unsigned int numBlocks = numAttributes * numKnownSamples / threadsPerBlock;
+    threadsPerBlock = 256;
+    numBlocks = numAttributes * numKnownSamples / threadsPerBlock;
     normalize<<<numBlocks, threadsPerBlock>>>(d_unknowns, d_max, d_min, 
-        numAttributes, numElems);
+        numAttributes, numUnknowns);
     
-    
-    
-
 }
