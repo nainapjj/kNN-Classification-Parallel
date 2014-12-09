@@ -58,6 +58,48 @@ __global__ void findDistance(float *d_inputAttributes, float *d_inputSample,  fl
         d_output[tid] = distance;
     }
 }
+__global__ void bitonic_sort (unsigned int*  d_val, unsigned int*  d_pos, 
+							  const int  padding, const int  count, const int inr)
+{
+  
+		//bitonic_sort_ <S> <<<gsize,bsize>>>(d_val, d_pos, padding, count, inr);
+		unsigned int up, down;
+		unsigned int up_, down_;
+	    unsigned int id = threadIdx.x+threadIdx.y*blockDim.x+blockIdx.x*blockDim.x*blockDim.y;
+		int updown = 0;//, inc, inr;
+		int pass=0;
+
+		if (id <padding)
+		{
+			updown = (id/count) % 2;
+			//determines the direction of the comparison 
+			up = d_val[id];
+			up_ = d_pos[id];
+			if (id % (inr*2) < inr)
+			{
+				down = d_val[id+inr];
+				down_= d_pos[id+inr];
+				//The output is a sorted list that is ascending if up is true
+				pass = ((int)(up>=down)==updown);
+
+				if (!pass)  
+				{
+					d_val[id]=down;
+					d_pos[id]=down_;
+					d_val[id+inr]=up;
+					d_pos[id+inr]=up_;
+				}
+			}
+			
+		}
+		return;
+    
+}
+
+__global__ void bitonicSort(float *d_distance, int numAttributes) 
+{
+    
+}
 
 /*__global__ void block_sum(float *input, float *results, size_t n)
 {
@@ -211,7 +253,8 @@ int main() {
     threadsPerBlock = 256;
     numBlocks = numAttributes / threadsPerBlock;
     
-    findDistance(d_knowns, d_unknowns[0],  d_distance, numAttributes, numKnownSamples);
+    findDistance<<<numBlocks, threadsPerBlock>>>(d_knowns, d_unknowns[0],  d_distance, 
+        numAttributes, numKnownSamples);
     
     float *h_distance = (float*) malloc(sizeof(float) * numKnownSamples);
     cudaMemcpy(h_distance, d_distance, sizeof(float) * numKnownSamples, cudaMemcpyDeviceToHost);
@@ -219,7 +262,7 @@ int main() {
     for (int i = 0; i < numKnownSamples; i++) {
         printf("%f ", h_distance[i]); 
     }
-    printf("\n");*/ 
+    printf("\n");
     
     /*cudaMemcpy(h_unknowns, d_unknowns, sizeof(float) * numUnknowns * numAttributes, cudaMemcpyDeviceToHost);
     
