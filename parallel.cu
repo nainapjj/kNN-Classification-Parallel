@@ -182,7 +182,7 @@ int main() {
     normalize<<<numBlocks, threadsPerBlock>>>(d_unknowns, d_max, d_min, 
         numAttributes, numUnknowns);
     
-    cudaMemcpy(h_unknowns, d_unknowns, sizeof(float) * numUnknowns * numAttributes, cudaMemcpyDeviceToDevice);
+    cudaMemcpy(h_unknowns, d_unknowns, sizeof(float) * numUnknowns * numAttributes, cudaMemcpyDeviceToHost);
     
     for (int i = 0; i < 5; i++) {
         printf("%f ", h_unknowns[i]); 
