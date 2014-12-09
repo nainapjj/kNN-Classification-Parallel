@@ -13,7 +13,7 @@
 #define MAX 10
 #define MIN 0
 
-#define FILE_NAME "small12345.txt"
+#define FILE_NAME "input.txt"
 #define K 2
 
 using namespace std;
@@ -29,12 +29,34 @@ __global__ void normalize(float * d_input, float *d_max, float *d_min, unsigned 
     }
 }
 
-__global__ void findDistance(float *d_inputNormal, float *d_inputSample,  float *d_output, unsigned int numElems) {
-    unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
-    if(tid < numElems) {
-        d_output[tid] = (d_inputNormal[tid] - d_inputSample[tid])*(d_inputNormal[tid] - d_inputSample[tid]);
+__global__ void findDistanceV2(float *d_inputAttributes, float **d_inputSample,  float *d_output, unsigned int numAttributes, 
+    unsigned int numSamples) {
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    if(row < numSamples && col < numAttributes) {
+        d_output[col+row*numAttributes] = (d_inputAttributes[col] - d_inputSample[row][col])*(d_inputAttributes[col] - d_inputSample[row][col]);
     }
 
+
+}
+
+__global__ void findDistance(float *d_inputAttributes, float *d_inputSample,  float *d_output, unsigned int numAttributes, 
+    unsigned int numElems) {
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    
+    float distance = 0;
+    
+    if (tid < numElems) {
+        for (int i = 0; i < numAttributes; i++) {
+            distance += (d_inputAttributes[numAttributes*tid + i] - d_inputSample[i])*
+                (d_inputAttributes[numAttributes*tid + i] - d_inputSample[i]);
+        }
+        
+        // OPTMIZIATION: We don't have to square root, because if 
+        // there's no point in wasting all of the distance values are squares
+        d_output[tid] = distance;
+    }
 }
 
 /*__global__ void block_sum(float *input, float *results, size_t n)
@@ -172,24 +194,43 @@ int main() {
     
     // Normalize the known values
     threadsPerBlock = 256;
-    numBlocks = numAttributes * numKnownSamples / threadsPerBlock;
+    numBlocks = numAttributes * numKnownSamples / threadsPerBlock + 1;
     normalize<<<numBlocks, threadsPerBlock>>>(d_knowns, d_max, d_min, 
         numAttributes, numKnownSamples);
     
     // Normalize the unknown values
     threadsPerBlock = 256;
-    numBlocks = numAttributes * numKnownSamples / threadsPerBlock;
+    numBlocks = numAttributes * numKnownSamples / threadsPerBlock + 1;
     normalize<<<numBlocks, threadsPerBlock>>>(d_unknowns, d_max, d_min, 
         numAttributes, numUnknowns);
+        
     
-    cudaMemcpy(h_unknowns, d_unknowns, sizeof(float) * numUnknowns * numAttributes, cudaMemcpyDeviceToHost);
+    // Generate the 
+    float *d_distance;
+    cudaMalloc(&d_distance, sizeof(float) * numKnownSamples);
+    threadsPerBlock = 256;
+    numBlocks = numAttributes / threadsPerBlock;
+    
+    findDistance(d_knowns, d_unknowns[0],  d_distance, numAttributes, numKnownSamples);
+    
+    float *h_distance = (float*) malloc(sizeof(float) * numKnownSamples);
+    cudaMemcpy(h_distance, d_distance, sizeof(float) * numKnownSamples, cudaMemcpyDeviceToHost);
+    
+    for (int i = 0; i < numKnownSamples; i++) {
+        printf("%f ", h_distance[i]); 
+    }
+    printf("\n");*/ 
+    
+    /*cudaMemcpy(h_unknowns, d_unknowns, sizeof(float) * numUnknowns * numAttributes, cudaMemcpyDeviceToHost);
     
     for (int i = 0; i < 5; i++) {
         printf("%f ", h_unknowns[i]); 
     }
-    printf("\n");
+    printf("\n");*/
 
     //float * distance;
     //cudaMalloc(&distance, sizeof(float) * numSomething
     //findDistance<<<numBlocks, threadsPerBlock>>>(d_knowns, d_unknowns, d_distance,  
+    
+    cudaMemcpy(h_unknowns, d_unknowns, sizeof(float) * numUnknowns * numAttributes, cudaMemcpyDeviceToHost);
 }
