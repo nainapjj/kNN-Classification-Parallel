@@ -187,7 +187,7 @@ void radixSort(unsigned int* const d_inputVals,
   }
 }
 
-int chooseMajority(unsigned int* d_outputClassification, unsigned int length, int numClass) {
+int chooseMajority(int* d_outputClassification, unsigned int length, int numClass) {
     int *histogram = new int[numClass];
     
     // Initialize the histogram
@@ -373,8 +373,8 @@ int main() {
     float *d_outputDistances;
     
     // Perform the sort
-    cudaMalloc(&d_outputClassification, sizeof(float) * numKnownSamples);
-    cudaMalloc(&d_outputDistances, sizeof(int) * numKnownSamples);
+    cudaMalloc(&d_outputClassification, sizeof(int) * numKnownSamples);
+    cudaMalloc(&d_outputDistances, sizeof(float) * numKnownSamples);
     
     radixSort((unsigned int*) d_distance,
                (unsigned int*) d_classifications,
