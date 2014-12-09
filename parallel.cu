@@ -13,6 +13,9 @@
 #define MAX 10
 #define MIN 0
 
+#define THREADS_PER_BLOCK 256
+#define BITS_IN_BYTE 8
+
 #define FILE_NAME "input.txt"
 #define K 2
 
@@ -111,8 +114,8 @@ void radixSort(unsigned int* const d_inputVals,
   for (unsigned int i = 0; i < (sizeof(unsigned int) * BITS_IN_BYTE); i++) {
     unsigned int *d_zeros;
 	unsigned int *d_ones;
-    checkCudaErrors(cudaMalloc(&d_zeros, sizeof(unsigned int) * numElems));
-	checkCudaErrors(cudaMalloc(&d_ones, sizeof(unsigned int) * numElems));
+    cudaMalloc(&d_zeros, sizeof(unsigned int) * numElems);
+	cudaMalloc(&d_ones, sizeof(unsigned int) * numElems);
 	
 	// Choose which digit to check currently for our radix
 	unsigned int mask = 1U << i;
@@ -151,8 +154,8 @@ void radixSort(unsigned int* const d_inputVals,
 	// Copy position elements to the device memory
 	unsigned int *d_positions_ones;
 	unsigned int *d_positions_zeros;
-	checkCudaErrors(cudaMalloc(&d_positions_ones, sizeof(unsigned int) * numElems));
-	checkCudaErrors(cudaMalloc(&d_positions_zeros, sizeof(unsigned int) * numElems));
+	cudaMalloc(&d_positions_ones, sizeof(unsigned int) * numElems);
+	cudaMalloc(&d_positions_zeros, sizeof(unsigned int) * numElems);
 
 	cudaMemcpy(d_positions_zeros, h_positions_zeros, sizeof(unsigned int) * numElems, 
 		cudaMemcpyHostToDevice);
@@ -163,16 +166,16 @@ void radixSort(unsigned int* const d_inputVals,
 	reorderElements<<<gridSize, blockSize>>>(d_outputVals, d_outputClassification, d_inputVals, d_inputClassification, 
 		d_positions_zeros, d_positions_ones, mask, numElems);
 	
-	checkCudaErrors(cudaMemcpy(d_inputVals, d_outputVals, sizeof(unsigned int) * numElems, 
-		cudaMemcpyDeviceToDevice));
-	checkCudaErrors(cudaMemcpy(d_inputClassification, d_outputClassification, sizeof(unsigned int) * numElems, 
-		cudaMemcpyDeviceToDevice));
+	cudaMemcpy(d_inputVals, d_outputVals, sizeof(unsigned int) * numElems, 
+		cudaMemcpyDeviceToDevice);
+	cudaMemcpy(d_inputClassification, d_outputClassification, sizeof(unsigned int) * numElems, 
+		cudaMemcpyDeviceToDevice);
 	
 	// Clear all of our allocated memory
-	checkCudaErrors(cudaFree(d_positions_ones));
-	checkCudaErrors(cudaFree(d_positions_zeros));
-	checkCudaErrors(cudaFree(d_ones));
-	checkCudaErrors(cudaFree(d_zeros));
+	cudaFree(d_positions_ones);
+	cudaFree(d_positions_zeros);
+	cudaFree(d_ones);
+	cudaFree(d_zeros);
 
 	free(h_zeros);
 	free(h_ones);
