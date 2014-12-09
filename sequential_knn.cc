@@ -209,6 +209,10 @@ int main() {
    for (int cUn = 0; cUn < numUnknowns; cUn++) {
         DistClass* dc = find_distance (unknowns[cUn], knowns, classifications, 
             numAttributes, numKnownSamples);
+        for (int i = 0; i < numAttributes; i++) {
+            cout << dc[i] << " "; 
+        } cout << endl;
+        
         
         /*for (int i = 0; i < numKnownSamples; i++) {
             cout << dc[i].classif << " " << dc[i].distance << endl;
