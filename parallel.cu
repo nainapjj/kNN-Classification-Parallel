@@ -348,12 +348,12 @@ int main() {
     }
     printf("\n");*/
     
-    float *d_outputClassification;
+    int *d_outputClassification;
     float *d_outputDistances;
     
     // Perform the sort
     cudaMalloc(&d_outputClassification, sizeof(float) * numKnownSamples);
-    cudaMalloc(&d_outputDistances, sizeof(float) * numKnownSamples);
+    cudaMalloc(&d_outputDistances, sizeof(int) * numKnownSamples);
     
     radixSort((unsigned int*) d_distance,
                (unsigned int*) d_classifications,
@@ -363,9 +363,9 @@ int main() {
                
     // Check to see if the sort worked
     float *h_outputDistances = (float*) malloc(sizeof(float) * numKnownSamples);
-    float *h_outputClassifications = (float*) malloc(sizeof(float) * numKnownSamples);
+    int *h_outputClassifications = (int*) malloc(sizeof(int) * numKnownSamples);
     cudaMemcpy(h_outputDistances, d_outputDistances, sizeof(float) * numKnownSamples, cudaMemcpyDeviceToHost);
-    cudaMemcpy(h_outputClassifications, d_outputClassification, sizeof(float) * numKnownSamples, cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_outputClassifications, d_outputClassification, sizeof(int) * numKnownSamples, cudaMemcpyDeviceToHost);
     
     for (int i = 0; i < numKnownSamples; i++) {
         cout << h_outputClassifications[i] << " " << h_outputDistances[i] << endl;
