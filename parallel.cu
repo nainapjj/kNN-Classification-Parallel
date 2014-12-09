@@ -392,8 +392,8 @@ int main() {
         cout << h_outputClassifications[i] << " " << h_outputDistances[i] << endl;
     }*/
     
-    cout << numClass;
+    int *h_outputClassifications = (int*) malloc(sizeof(int) * numKnownSamples);
+    cudaMemcpy(h_outputClassifications, d_outputClassification, sizeof(int) * numKnownSamples, cudaMemcpyDeviceToHost);
     cout << unknownNames[0] << chooseMajority(d_outputClassification, numKnownSamples, numClass);
-    
     
 }
