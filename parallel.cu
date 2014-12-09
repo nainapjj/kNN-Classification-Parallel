@@ -49,11 +49,10 @@ __global__ void findDistance(float *d_inputAttributes, float *d_inputSample,  fl
     
     if (tid < numElems) {
         for (int i = 0; i < numAttributes; i++) {
-            distance += (d_inputAttributes[numAttributes*tid + i] - d_inputSample[i])*
-                (d_inputAttributes[numAttributes*tid + i] - d_inputSample[i]);
+            distance += pow(d_inputAttributes[numAttributes*tid + i] - d_inputSample[i], 2);
         }
         
-        // OPTMIZIATION: We don't have to square root, because if 
+        // OPTIMIZATION: We don't have to square root, because if 
         // there's no point in wasting all of the distance values are squares
         d_output[tid] = distance;
     }
@@ -266,7 +265,7 @@ int main() {
     float *d_distance;
     cudaMalloc(&d_distance, sizeof(float) * numKnownSamples);
     threadsPerBlock = 256;
-    numBlocks = numAttributes / threadsPerBlock;
+    numBlocks = numAttributes / threadsPerBlock + 1;
     
     findDistance<<<numBlocks, threadsPerBlock>>>(d_knowns, d_unknowns+0,  d_distance, 
         numAttributes, numKnownSamples);
