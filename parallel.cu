@@ -58,61 +58,127 @@ __global__ void findDistance(float *d_inputAttributes, float *d_inputSample,  fl
     }
 }
 
-//  unsigned int *d_val;
-//  unsigned int *d_pos;
-//	unsigned int exp = (unsigned int)log2((float)numElems)+1;
-//	unsigned int padding = (unsigned int)exp2((float)exp);
-//for (int i = 2; i<=padding; i=i*2)
-//    {
-//		 for (int inr = i/2; inr>=1; inr=inr/2)
-//		{
-//			//use bitonic sort
-//			bitonic_sort<<<grid,block>>> (d_val, d_pos, padding, i, inr);
-//		}
-//	}
-
-
-__global__ void bitonic_sort (unsigned int*  d_val, unsigned int*  d_pos, 
-							  const int  padding, const int  count, const int inr)
-{
-  
-		//bitonic_sort_ <S> <<<gsize,bsize>>>(d_val, d_pos, padding, count, inr);
-		unsigned int up, down;
-		unsigned int up_, down_;
-	    unsigned int id = threadIdx.x+threadIdx.y*blockDim.x+blockIdx.x*blockDim.x*blockDim.y;
-		int updown = 0;//, inc, inr;
-		int pass=0;
-
-		if (id <padding)
-		{
-			updown = (id/count) % 2;
-			//determines the direction of the comparison 
-			up = d_val[id];
-			up_ = d_pos[id];
-			if (id % (inr*2) < inr)
-			{
-				down = d_val[id+inr];
-				down_= d_pos[id+inr];
-				//The output is a sorted list that is ascending if up is true
-				pass = ((int)(up>=down)==updown);
-
-				if (!pass)  
-				{
-					d_val[id]=down;
-					d_pos[id]=down_;
-					d_val[id+inr]=up;
-					d_pos[id+inr]=up_;
-				}
-			}
-			
+// RADIX Sort helper function
+// Map Ones and Zeros
+__global__
+void mapOnesZeros(unsigned int* const d_ones, unsigned int* const d_zeros, const unsigned int* const d_inputVals, 
+			 const unsigned int mask, const size_t numElems) {
+	int myId = threadIdx.x + blockDim.x * blockIdx.x;
+	
+	// Check if we're outside the bounds of the array
+	if (myId < numElems) {
+		if ((d_inputVals[myId] & mask) == 0) {
+			d_zeros[myId] = 1;
+			d_ones[myId] = 0;
+		} else {
+			d_zeros[myId] = 0;
+			d_ones[myId] = 1;
 		}
-		return;
-    
+	}
 }
 
-__global__ void bitonicSort(float *d_distance, int numAttributes) 
-{
-    
+// Reorder elements based on their generated positions
+__global__
+void reorderElements(unsigned int* const d_outputVals, unsigned int* const d_outputClassification, 
+	const unsigned int* const d_inputVals, const unsigned int* const d_inputClassification, const unsigned int* const d_positions_zeros, 
+	const unsigned int* const d_positions_ones, const unsigned int mask, const size_t numElems) {
+	int myId = threadIdx.x + blockDim.x * blockIdx.x;
+	
+	// Check if we're outside the bounds of the array
+	if (myId < numElems) {
+		// Based on if the digit is zero or one depends on which position values
+		if ((d_inputVals[myId] & mask) == 0) {
+			d_outputVals[d_positions_zeros[myId]] = d_inputVals[myId];
+			d_outputClassification[d_positions_zeros[myId]] = d_inputClassification[myId];
+		} else {
+			d_outputVals[d_positions_ones[myId]] = d_inputVals[myId];
+			d_outputClassification[d_positions_ones[myId]] = d_inputClassification[myId];
+		}
+	}
+}
+ 
+void radixSort(unsigned int* const d_inputVals,
+               unsigned int* const d_inputClassification,
+               unsigned int* const d_outputVals,
+               unsigned int* const d_outputClassification,
+               const size_t numElems)
+{ 
+  // Set the proper grid size and block size for this problem.
+  int blockSize = THREADS_PER_BLOCK;
+  int gridSize = numElems / blockSize + 1;
+
+  // Iterate over the number of bits in the unsigned int.
+  for (unsigned int i = 0; i < (sizeof(unsigned int) * BITS_IN_BYTE); i++) {
+    unsigned int *d_zeros;
+	unsigned int *d_ones;
+    checkCudaErrors(cudaMalloc(&d_zeros, sizeof(unsigned int) * numElems));
+	checkCudaErrors(cudaMalloc(&d_ones, sizeof(unsigned int) * numElems));
+	
+	// Choose which digit to check currently for our radix
+	unsigned int mask = 1U << i;
+	
+	// Find out which digits end in 0, and which digits end in 1
+	mapOnesZeros<<<gridSize, blockSize>>>(d_ones, d_zeros, d_inputVals, mask, numElems);
+
+	// Thrust requires us to copy the memory from Cuda to the host for
+	// processing.
+	unsigned int *h_zeros = (unsigned int *) malloc(sizeof(unsigned int) * numElems);
+	unsigned int *h_ones = (unsigned int *) malloc(sizeof(unsigned int) * numElems);
+	unsigned int *h_positions_zeros = (unsigned int *) malloc(sizeof(unsigned int) * numElems);
+	unsigned int *h_positions_ones = (unsigned int *) malloc(sizeof(unsigned int) * numElems);
+
+	cudaMemcpy(h_zeros, d_zeros, sizeof(unsigned int) * numElems, 
+		cudaMemcpyDeviceToHost);
+	cudaMemcpy(h_ones, d_ones, sizeof(unsigned int) * numElems, 
+		cudaMemcpyDeviceToHost);
+
+	// Perform an exclusive scan on zeros to determine the position of elements with zero
+	thrust::exclusive_scan(h_zeros, h_zeros + numElems, h_positions_zeros, 0);
+	
+	// Determine the position offset to shift the ones positions by
+	// If the last element's digit is a zero, then it's the last element of d_positions_zeros
+	// Otherwise, it's just the (last element of the d_positions_zeros array + 1)
+	unsigned int offset;
+	if (h_zeros[numElems - 1] == 1) { 
+		offset = h_positions_zeros[numElems - 1] + 1;
+	} else {
+		offset = h_positions_zeros[numElems - 1];
+	}
+	
+	// Perform an exclusive scan on the ones (with offset) to position elements with one
+	thrust::exclusive_scan(h_ones, h_ones + numElems, h_positions_ones, offset);
+
+	// Copy position elements to the device memory
+	unsigned int *d_positions_ones;
+	unsigned int *d_positions_zeros;
+	checkCudaErrors(cudaMalloc(&d_positions_ones, sizeof(unsigned int) * numElems));
+	checkCudaErrors(cudaMalloc(&d_positions_zeros, sizeof(unsigned int) * numElems));
+
+	cudaMemcpy(d_positions_zeros, h_positions_zeros, sizeof(unsigned int) * numElems, 
+		cudaMemcpyHostToDevice);
+	cudaMemcpy(d_positions_ones, h_positions_ones, sizeof(unsigned int) * numElems, 
+		cudaMemcpyHostToDevice);
+	
+	// Now reorder the elements in cuda, based on our position items
+	reorderElements<<<gridSize, blockSize>>>(d_outputVals, d_outputClassification, d_inputVals, d_inputClassification, 
+		d_positions_zeros, d_positions_ones, mask, numElems);
+	
+	checkCudaErrors(cudaMemcpy(d_inputVals, d_outputVals, sizeof(unsigned int) * numElems, 
+		cudaMemcpyDeviceToDevice));
+	checkCudaErrors(cudaMemcpy(d_inputClassification, d_outputClassification, sizeof(unsigned int) * numElems, 
+		cudaMemcpyDeviceToDevice));
+	
+	// Clear all of our allocated memory
+	checkCudaErrors(cudaFree(d_positions_ones));
+	checkCudaErrors(cudaFree(d_positions_zeros));
+	checkCudaErrors(cudaFree(d_ones));
+	checkCudaErrors(cudaFree(d_zeros));
+
+	free(h_zeros);
+	free(h_ones);
+	free(h_positions_ones);
+	free(h_positions_zeros);
+  }
 }
 
 /*__global__ void block_sum(float *input, float *results, size_t n)
@@ -204,7 +270,6 @@ void parse(int* numAttributes, int* numKnownSamples, int* numClass, int *numUnkn
 
 
 
-//this is pseudocode
 int main() {
     unsigned int numBlocks = 512;
     unsigned int threadsPerBlock = 256;
@@ -246,7 +311,6 @@ int main() {
     cudaMemcpy(d_knowns, h_knowns, sizeof(float) * numKnownSamples * numAttributes, cudaMemcpyHostToDevice);
     cudaMemcpy(d_unknowns, h_unknowns, sizeof(float) * numUnknowns * numAttributes, cudaMemcpyHostToDevice);
     cudaMemcpy(d_classifications, h_classifications, sizeof(int) * numKnownSamples, cudaMemcpyHostToDevice);
-
     
     // Normalize the known values
     threadsPerBlock = 256;
@@ -261,7 +325,7 @@ int main() {
         numAttributes, numUnknowns);
         
     
-    // Generate the 
+    // Find the distances between the  
     float *d_distance;
     cudaMalloc(&d_distance, sizeof(float) * numKnownSamples);
     threadsPerBlock = 256;
@@ -270,13 +334,36 @@ int main() {
     findDistance<<<numBlocks, threadsPerBlock>>>(d_knowns, d_unknowns+0,  d_distance, 
         numAttributes, numKnownSamples);
     
-    float *h_distance = (float*) malloc(sizeof(float) * numKnownSamples);
+    /*float *h_distance = (float*) malloc(sizeof(float) * numKnownSamples);
     cudaMemcpy(h_distance, d_distance, sizeof(float) * numKnownSamples, cudaMemcpyDeviceToHost);
     
     for (int i = 0; i < numKnownSamples; i++) {
         printf("%f ", h_distance[i]); 
     }
-    printf("\n");
+    printf("\n");*/
+    
+    float *d_outputClassification;
+    float *d_outputDistances;
+    
+    // Perform the sort
+    cudaMalloc(&d_outputClassification, sizeof(float) * numKnownSamples);
+    cudaMalloc(&d_outputDistances, sizeof(float) * numKnownSamples);
+    
+    radixSort((unsigned int*) d_distance,
+               (unsigned int*) d_classifications,
+               (unsigned int*) d_outputDistances,
+               (unsigned int*) d_outputClassification,
+               numKnownSamples);
+               
+    // Check to see if the sort worked
+    float *h_outputDistances = (float*) malloc(sizeof(float) * numKnownSamples);
+    float *h_outputClassifications = (float*) malloc(sizeof(float) * numKnownSamples);
+    cudaMemcpy(h_outputDistances, d_outputDistances, sizeof(float) * numKnownSamples, cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_outputClassifications, d_outputClassification, sizeof(float) * numKnownSamples, cudaMemcpyDeviceToHost);
+    
+    for (int i = 0; i < numKnownSamples; i++) {
+        cout << h_outputClassifications[i] << " " << h_outputDistances[i] << endl;
+    }
     
     /*cudaMemcpy(h_unknowns, d_unknowns, sizeof(float) * numUnknowns * numAttributes, cudaMemcpyDeviceToHost);
     
