@@ -392,6 +392,7 @@ int main() {
         cout << h_outputClassifications[i] << " " << h_outputDistances[i] << endl;
     }*/
     
+    cout << numClass;
     cout << unknownNames[0] << chooseMajority(d_outputClassification, numKnownSamples, numClass);
     
     
