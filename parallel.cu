@@ -187,6 +187,27 @@ void radixSort(unsigned int* const d_inputVals,
   }
 }
 
+int chooseMajority(unsigned int* d_outputClassification, unsigned int length, int numClass) {
+    int *histogram = new int[numClass];
+    
+    // Initialize the histogram
+    for (int i = 0; i < numClass; i++) {
+        histogram[i] = 0;
+    }
+    
+    // Count the values.
+    for (int i = 0; i < K; i++) {
+        // Make sure we're not above array bounds
+        if (i < length) {
+            histogram[d_outputClassification[i]]++;
+        }
+    }
+    
+    // Find the element of the majority
+    int maxClass = distance(histogram, max_element(histogram, histogram + numClass));
+    return maxClass;
+}
+
 /*__global__ void block_sum(float *input, float *results, size_t n)
 {
     extern __shared__ float sdata[];
@@ -360,27 +381,18 @@ int main() {
                (unsigned int*) d_outputDistances,
                (unsigned int*) d_outputClassification,
                numKnownSamples);
-               
-    // Check to see if the sort worked
+    
+    /*// Check to see if the sort worked
     float *h_outputDistances = (float*) malloc(sizeof(float) * numKnownSamples);
     int *h_outputClassifications = (int*) malloc(sizeof(int) * numKnownSamples);
     cudaMemcpy(h_outputDistances, d_outputDistances, sizeof(float) * numKnownSamples, cudaMemcpyDeviceToHost);
     cudaMemcpy(h_outputClassifications, d_outputClassification, sizeof(int) * numKnownSamples, cudaMemcpyDeviceToHost);
-    
+
     for (int i = 0; i < numKnownSamples; i++) {
         cout << h_outputClassifications[i] << " " << h_outputDistances[i] << endl;
-    }
+    }*/
     
-    /*cudaMemcpy(h_unknowns, d_unknowns, sizeof(float) * numUnknowns * numAttributes, cudaMemcpyDeviceToHost);
+    cout << unknownNames[0] << chooseMajority(d_outputClassification, numKnownSamples, numClass);
     
-    for (int i = 0; i < 5; i++) {
-        printf("%f ", h_unknowns[i]); 
-    }
-    printf("\n");*/
-
-    //float * distance;
-    //cudaMalloc(&distance, sizeof(float) * numSomething
-    //findDistance<<<numBlocks, threadsPerBlock>>>(d_knowns, d_unknowns, d_distance,  
     
-    cudaMemcpy(h_unknowns, d_unknowns, sizeof(float) * numUnknowns * numAttributes, cudaMemcpyDeviceToHost);
 }
