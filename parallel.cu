@@ -10,6 +10,9 @@
 #include <cuda_runtime.h>
 #include <cuda_runtime_api.h>
 
+#include <thrust/host_vector.h>
+#include <thrust/scan.h>
+
 #define MAX 10
 #define MIN 0
 
