@@ -382,7 +382,7 @@ int main() {
                (unsigned int*) d_outputClassification,
                numKnownSamples);
     
-    /*// Check to see if the sort worked
+    // Check to see if the sort worked
     float *h_outputDistances = (float*) malloc(sizeof(float) * numKnownSamples);
     int *h_outputClassifications = (int*) malloc(sizeof(int) * numKnownSamples);
     cudaMemcpy(h_outputDistances, d_outputDistances, sizeof(float) * numKnownSamples, cudaMemcpyDeviceToHost);
@@ -390,7 +390,7 @@ int main() {
 
     for (int i = 0; i < numKnownSamples; i++) {
         cout << h_outputClassifications[i] << " " << h_outputDistances[i] << endl;
-    }*/
+    }
     
     int *h_outputClassifications = (int*) malloc(sizeof(int) * numKnownSamples);
     cudaMemcpy(h_outputClassifications, d_outputClassification, sizeof(int) * numKnownSamples, cudaMemcpyDeviceToHost);
