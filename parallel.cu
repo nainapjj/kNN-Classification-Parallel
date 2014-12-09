@@ -58,6 +58,14 @@ __global__ void findDistance(float *d_inputAttributes, float *d_inputSample,  fl
         d_output[tid] = distance;
     }
 }
+
+//   unsigned int *d_val;
+//  unsigned int *d_pos;
+//	unsigned int exp = (unsigned int)log2((float)numElems)+1;
+//	unsigned int padding = (unsigned int)exp2((float)exp);
+//
+
+
 __global__ void bitonic_sort (unsigned int*  d_val, unsigned int*  d_pos, 
 							  const int  padding, const int  count, const int inr)
 {
@@ -253,7 +261,7 @@ int main() {
     threadsPerBlock = 256;
     numBlocks = numAttributes / threadsPerBlock;
     
-    findDistance<<<numBlocks, threadsPerBlock>>>(d_knowns, d_unknowns[0],  d_distance, 
+    findDistance<<<numBlocks, threadsPerBlock>>>(d_knowns, d_unknowns[0],  d_distance+0, 
         numAttributes, numKnownSamples);
     
     float *h_distance = (float*) malloc(sizeof(float) * numKnownSamples);
