@@ -11,7 +11,10 @@
 #include <cuda_runtime_api.h>
 
 #include <thrust/host_vector.h>
+#include <thrust/device_ptr.h>
 #include <thrust/scan.h>
+#include <thrust/reduce.h>
+#include <thrust/sort.h>
 
 #define MAX 10
 #define MIN 0
@@ -19,8 +22,17 @@
 #define THREADS_PER_BLOCK 256
 #define BITS_IN_BYTE 8
 
-#define FILE_NAME "input.txt"
+#define FILE_NAME "input1000.txt"
 #define K 2
+
+// Different versions for the parallel algorithm
+#define RADIX_SORT 0
+#define THRUST_SORT 1
+#define SORT RADIX_SORT
+
+#define DISTANCE_GATHER 0
+#define DISTANCE_MAPREDUCE 1
+#define DISTANCE DISTANCE_MAPREDUCE
 
 using namespace std;
 
@@ -35,16 +47,16 @@ __global__ void normalize(float * d_input, float *d_max, float *d_min, unsigned 
     }
 }
 
-__global__ void findDistanceV2(float *d_inputAttributes, float **d_inputSample,  float *d_output, unsigned int numAttributes, 
+__global__ void findDistanceMap(float *d_inputAttributes, float *d_inputSample,  float *d_output, unsigned int numAttributes, 
     unsigned int numSamples) {
-    int row = blockIdx.y * blockDim.y + threadIdx.y;
-    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
     
-    if(row < numSamples && col < numAttributes) {
-        d_output[col+row*numAttributes] = (d_inputAttributes[col] - d_inputSample[row][col])*(d_inputAttributes[col] - d_inputSample[row][col]);
+    if(tid < numAttributes * numSamples) {
+        d_output[tid] = pow(d_inputAttributes[tid] - d_inputSample[tid % numAttributes], 2);
     }
-
-
+    
+    
 }
 
 __global__ void findDistance(float *d_inputAttributes, float *d_inputSample,  float *d_output, unsigned int numAttributes, 
@@ -63,6 +75,42 @@ __global__ void findDistance(float *d_inputAttributes, float *d_inputSample,  fl
         d_output[tid] = distance;
     }
 }
+
+void distances(float *d_knowns, float* d_unknownSample,  float *d_distance, 
+        int numAttributes, int numKnownSamples)
+{
+    if (DISTANCE == DISTANCE_GATHER) {
+        int threadsPerBlock = THREADS_PER_BLOCK;
+        int numBlocks = numKnownSamples / threadsPerBlock + 1;
+    
+        findDistance<<<numBlocks, threadsPerBlock>>>(d_knowns, d_unknownSample,  d_distance, 
+            numAttributes, numKnownSamples);
+    } else if (DISTANCE == DISTANCE_MAPREDUCE) {
+        // Find the distances between the  
+        float *d_distanceMap;
+        cudaMalloc(&d_distanceMap, sizeof(float) * numKnownSamples * numAttributes);
+        
+        float *h_distance = (float*) malloc(sizeof(float) * numKnownSamples);
+        
+        int threadsPerBlock = THREADS_PER_BLOCK;
+        int numBlocks = numAttributes * numKnownSamples / threadsPerBlock + 1;
+        
+        findDistanceMap<<<numBlocks, threadsPerBlock>>>(d_knowns, d_unknownSample,  d_distanceMap, 
+            numAttributes, numKnownSamples);
+            
+        thrust::device_ptr<float> t_distanceMap = thrust::device_pointer_cast(d_distanceMap); 
+        
+        for (int i = 0; i < numKnownSamples; i++) {
+            h_distance[i] = thrust::reduce(t_distanceMap+(i*numAttributes), t_distanceMap+(i+1)*numAttributes, 0.0);
+        }
+        
+        cudaMemcpy(d_distance, h_distance, sizeof(float) * numKnownSamples, cudaMemcpyHostToDevice);
+        
+        cudaFree(d_distanceMap);
+        free(h_distance);
+    }
+}
+
 
 // RADIX Sort helper function
 // Map Ones and Zeros
@@ -187,6 +235,32 @@ void radixSort(unsigned int* const d_inputVals,
   }
 }
 
+void sort(unsigned int* const d_inputVals,
+               unsigned int* const d_inputClassification,
+               unsigned int* const d_outputVals,
+               unsigned int* const d_outputClassification,
+               const size_t numElems)
+{
+    if (SORT == RADIX_SORT) {
+        radixSort(d_inputVals, d_inputClassification,
+               d_outputVals,d_outputClassification,
+               numElems);
+    } else if (SORT == THRUST_SORT) {
+        float *h_outputClassification = (float*) malloc(sizeof(float) * numElems);
+        float *h_outputVals = (float*) malloc(sizeof(float) * numElems);
+        cudaMemcpy(h_outputClassification, d_inputClassification, sizeof(float) * numElems, cudaMemcpyDeviceToHost);
+        cudaMemcpy(h_outputVals, d_inputVals, sizeof(float) * numElems, cudaMemcpyDeviceToHost);
+        
+        thrust::sort_by_key(h_outputVals, h_outputVals + numElems, h_outputClassification);
+        
+        cudaMemcpy(d_outputClassification, h_outputClassification, sizeof(float) * numElems, cudaMemcpyHostToDevice);
+        cudaMemcpy(d_outputVals, h_outputVals, sizeof(float) * numElems, cudaMemcpyHostToDevice);
+        
+        free(h_outputClassification);
+        free(h_outputVals);
+    }
+}
+
 int chooseMajority(int* d_outputClassification, unsigned int length, int numClass) {
     int *histogram = new int[numClass];
     
@@ -253,7 +327,7 @@ void parse(int* numAttributes, int* numKnownSamples, int* numClass, int *numUnkn
     *min = (float*) malloc(sizeof(float) * numAttrib);
     *max = (float*) malloc(sizeof(float) * numAttrib);
     for (int i = 0; i < numAttrib; i++) {
-        int currentMax, currentMin;
+        float currentMax, currentMin;
         myfile >> currentMin >> currentMax;
         (*min)[i] = currentMin;
         (*max)[i] = currentMax;
@@ -298,8 +372,8 @@ void parse(int* numAttributes, int* numKnownSamples, int* numClass, int *numUnkn
 
 
 int main() {
-    unsigned int numBlocks = 512;
-    unsigned int threadsPerBlock = 256;
+    unsigned int threadsPerBlock = THREADS_PER_BLOCK;
+    int numBlocks;
     
     // Metadata about our learning algorithm data
     int numAttributes, numKnownSamples, numClass, numUnknowns;
@@ -320,11 +394,21 @@ int main() {
     
     // Needed for the profiling
     std::clock_t start;
-    float duration;
+    std::clock_t kStart;
+    
+    float totalDuration;
+    float normalDuration = 0;
+    float distanceDuration = 0;
+    float sortDuration = 0;
+    float majorityDuration = 0;
     
     parse(&numAttributes, &numKnownSamples, &numClass, &numUnknowns, 
         &h_min, &h_max, &h_knowns, &h_classifications, &h_unknowns, &unknownNames);
     
+    
+    
+    start = std::clock();
+
     // Start mallocing the data to the kernel
     cudaMalloc(&d_min, sizeof(float) * numAttributes);
     cudaMalloc(&d_max, sizeof(float) * numAttributes);
@@ -339,6 +423,9 @@ int main() {
     cudaMemcpy(d_unknowns, h_unknowns, sizeof(float) * numUnknowns * numAttributes, cudaMemcpyHostToDevice);
     cudaMemcpy(d_classifications, h_classifications, sizeof(int) * numKnownSamples, cudaMemcpyHostToDevice);
     
+    
+    kStart = std::clock();
+    
     // Normalize the known values
     threadsPerBlock = 256;
     numBlocks = numAttributes * numKnownSamples / threadsPerBlock + 1;
@@ -350,50 +437,79 @@ int main() {
     numBlocks = numAttributes * numKnownSamples / threadsPerBlock + 1;
     normalize<<<numBlocks, threadsPerBlock>>>(d_unknowns, d_max, d_min, 
         numAttributes, numUnknowns);
+    
+    normalDuration = ( std::clock() - kStart ) / (float) CLOCKS_PER_SEC;
+    
+    for (int cUn = 0; cUn < numUnknowns; cUn++) {
+        // Find the distances between the 
         
+        kStart = std::clock();
+        
+        float *d_distance;
+        cudaMalloc(&d_distance, sizeof(float) * numKnownSamples);
     
-    // Find the distances between the  
-    float *d_distance;
-    cudaMalloc(&d_distance, sizeof(float) * numKnownSamples);
-    threadsPerBlock = 256;
-    numBlocks = numAttributes / threadsPerBlock + 1;
-    
-    findDistance<<<numBlocks, threadsPerBlock>>>(d_knowns, d_unknowns+0,  d_distance, 
-        numAttributes, numKnownSamples);
-    
-    /*float *h_distance = (float*) malloc(sizeof(float) * numKnownSamples);
-    cudaMemcpy(h_distance, d_distance, sizeof(float) * numKnownSamples, cudaMemcpyDeviceToHost);
-    
-    for (int i = 0; i < numKnownSamples; i++) {
-        printf("%f ", h_distance[i]); 
+        distances(d_knowns, d_unknowns+cUn*numAttributes,  d_distance, numAttributes, numKnownSamples);
+        
+        distanceDuration += ( std::clock() - kStart ) / (float) CLOCKS_PER_SEC;
+        
+        /*float *h_distance = (float*) malloc(sizeof(float) * numKnownSamples);
+        cudaMemcpy(h_distance, d_distance, sizeof(float) * numKnownSamples, cudaMemcpyDeviceToHost);
+        
+        for (int i = 0; i < numKnownSamples; i++) {
+            printf("%f ", h_distance[i]); 
+        }
+        printf("\n");*/
+        
+        kStart = std::clock();
+        
+        int *d_outputClassification;
+        float *d_outputDistances;
+        
+        // Perform the sort
+        cudaMalloc(&d_outputClassification, sizeof(int) * numKnownSamples);
+        cudaMalloc(&d_outputDistances, sizeof(float) * numKnownSamples);
+        
+        sort((unsigned int*) d_distance,
+                   (unsigned int*) d_classifications,
+                   (unsigned int*) d_outputDistances,
+                   (unsigned int*) d_outputClassification,
+                   numKnownSamples);
+         
+        sortDuration += ( std::clock() - kStart ) / (float) CLOCKS_PER_SEC;
+        
+        kStart = std::clock();
+        
+        int *h_outputClassifications = (int*) malloc(sizeof(int) * numKnownSamples);
+        cudaMemcpy(h_outputClassifications, d_outputClassification, sizeof(int) * numKnownSamples, cudaMemcpyDeviceToHost);
+        
+        /*
+        float *h_outputDistances = (float*) malloc(sizeof(float) * numKnownSamples);
+        cudaMemcpy(h_outputDistances, d_outputDistances, sizeof(float) * numKnownSamples, cudaMemcpyDeviceToHost);
+        for (int i = 0; i < numKnownSamples; i++) {
+            cout << h_outputClassifications[i] << " " << h_outputDistances[i] << endl;
+        }*/
+        
+        //int *h_outputClassifications = (int*) malloc(sizeof(int) * numKnownSamples);
+        
+        int majority = chooseMajority(h_outputClassifications, numKnownSamples, numClass);
+        
+        majorityDuration +=  ( std::clock() - kStart ) / (float) CLOCKS_PER_SEC;
+        
+        cudaMemcpy(h_outputClassifications, d_outputClassification, sizeof(int) * numKnownSamples, cudaMemcpyDeviceToHost);
+        //cout << unknownNames[0] << " " << majority << endl;
+        
+        cudaFree(d_distance);
+        cudaFree(d_outputClassification);
+        cudaFree(d_outputDistances);
+        free(h_outputClassifications);
     }
-    printf("\n");*/
     
-    int *d_outputClassification;
-    float *d_outputDistances;
+    totalDuration = ( std::clock() - start ) / (float) CLOCKS_PER_SEC;
     
-    // Perform the sort
-    cudaMalloc(&d_outputClassification, sizeof(int) * numKnownSamples);
-    cudaMalloc(&d_outputDistances, sizeof(float) * numKnownSamples);
-    
-    radixSort((unsigned int*) d_distance,
-               (unsigned int*) d_classifications,
-               (unsigned int*) d_outputDistances,
-               (unsigned int*) d_outputClassification,
-               numKnownSamples);
-    
-    // Check to see if the sort worked
-    float *h_outputDistances = (float*) malloc(sizeof(float) * numKnownSamples);
-    int *h_outputClassifications = (int*) malloc(sizeof(int) * numKnownSamples);
-    cudaMemcpy(h_outputDistances, d_outputDistances, sizeof(float) * numKnownSamples, cudaMemcpyDeviceToHost);
-    cudaMemcpy(h_outputClassifications, d_outputClassification, sizeof(int) * numKnownSamples, cudaMemcpyDeviceToHost);
-
-    for (int i = 0; i < numKnownSamples; i++) {
-        cout << h_outputClassifications[i] << " " << h_outputDistances[i] << endl;
-    }
-    
-    int *h_outputClassifications = (int*) malloc(sizeof(int) * numKnownSamples);
-    cudaMemcpy(h_outputClassifications, d_outputClassification, sizeof(int) * numKnownSamples, cudaMemcpyDeviceToHost);
-    cout << unknownNames[0] << " " << chooseMajority(h_outputClassifications, numKnownSamples, numClass);
+    std::cout<<"total Duration: "<< duration <<'\n';
+    cout << "normal duraton" <<  normalDuration;
+    cout << "distance duration" <<  distanceDuration ;
+    cout << "sort duration" <<  sortDuration;
+    cout << "majority duration" <<  majorityDuration ;
     
 }

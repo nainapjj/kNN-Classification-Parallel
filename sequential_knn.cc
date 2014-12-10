@@ -7,12 +7,12 @@
 
 using namespace std;
 
-#define FILE_NAME "small12345.txt"
+#define FILE_NAME "political.txt"
 #define K 2
 
 struct DistClass {
     int classif;
-    double distance;
+    float distance;
 };
 
 bool distClassCompare(DistClass d1, DistClass d2) {
@@ -53,7 +53,7 @@ void sortDistances(DistClass *vals, unsigned int length) {
 }
 
 //find distance
-DistClass* find_distance (double* unknownObject, double** knownSamples, int* classif, 
+DistClass* find_distance (float* unknownObject, float** knownSamples, int* classif, 
     int numAtributes, int numKnownSamples) 
 {
     
@@ -65,11 +65,11 @@ DistClass* find_distance (double* unknownObject, double** knownSamples, int* cla
         
         distances[i].classif = classif[i];
         
-        double distance = 0;
+        float distance = 0;
         for (int j = 0; j < numAtributes; j++)
         {
-            double x = unknownObject[j];
-            double t = knownSamples[i][j];
+            float x = unknownObject[j];
+            float t = knownSamples[i][j];
             
             distance = distance + ((x-t) * (x-t));
         }
@@ -84,8 +84,8 @@ DistClass* find_distance (double* unknownObject, double** knownSamples, int* cla
     
 
 void parse(int* numAttributes, int* numKnownSamples, int* numClass, int *numUnknowns,
-    double ** min, double ** max, double *** knowns, int ** classifications, 
-    double *** unknowns, string** unknownNames)
+    float ** min, float ** max, float *** knowns, int ** classifications, 
+    float *** unknowns, string** unknownNames)
 {
     ifstream myfile(FILE_NAME, ios::in);  // declare and open
     
@@ -98,10 +98,10 @@ void parse(int* numAttributes, int* numKnownSamples, int* numClass, int *numUnkn
     *numUnknowns = numUn;
     
     // Populate all of the mins and maxes
-    *min = (double*) malloc(sizeof(double) * numAttrib);
-    *max = (double*) malloc(sizeof(double) * numAttrib);
+    *min = (float*) malloc(sizeof(float) * numAttrib);
+    *max = (float*) malloc(sizeof(float) * numAttrib);
     for (int i = 0; i < numAttrib; i++) {
-        int currentMax, currentMin;
+        float currentMax, currentMin;
         myfile >> currentMin >> currentMax;
         (*min)[i] = currentMin;
         (*max)[i] = currentMax;
@@ -110,16 +110,16 @@ void parse(int* numAttributes, int* numKnownSamples, int* numClass, int *numUnkn
     
     // Populate the known object types
     *classifications =(int*) malloc(sizeof(int) * numKnownSamp);
-    *knowns = (double**) malloc(sizeof(double*) * numKnownSamp);
+    *knowns = (float**) malloc(sizeof(float*) * numKnownSamp);
     
     for (int i = 0; i < numKnownSamp; i++) {
-        (*knowns)[i] = (double*) malloc(sizeof(double) * numAttrib);
+        (*knowns)[i] = (float*) malloc(sizeof(float) * numAttrib);
         int currentClass;
         myfile >> currentClass;
         (*classifications)[i] = currentClass;
         
         for (int j = 0; j < numAttrib; j++) {
-            double currentAttrib;
+            float currentAttrib;
             myfile >> currentAttrib;
             (*knowns)[i][j] = currentAttrib;
         }
@@ -128,17 +128,17 @@ void parse(int* numAttributes, int* numKnownSamples, int* numClass, int *numUnkn
     
     // Populate the unknown object types
     *unknownNames = new string[numUn];
-    *unknowns = (double**) malloc(sizeof(double*) * numUn);
+    *unknowns = (float**) malloc(sizeof(float*) * numUn);
     
     
     for (int i = 0; i < numUn; i++) {
-        (*unknowns)[i] = (double*) malloc(sizeof(double) * numAttrib);
+        (*unknowns)[i] = (float*) malloc(sizeof(float) * numAttrib);
         string currentName;
         myfile >> currentName;
         (*unknownNames)[i] = currentName;
         
         for (int j = 0; j < numAttrib; j++) {
-            double currentAttrib;
+            float currentAttrib;
             myfile >> currentAttrib;
             (*unknowns)[i][j] = currentAttrib;
         }
@@ -148,7 +148,7 @@ void parse(int* numAttributes, int* numKnownSamples, int* numClass, int *numUnkn
 }
 
 
-void normalize(double *min, double *max, double **knowns, int numAttributes, int numKnownSamples){
+void normalize(float *min, float *max, float **knowns, int numAttributes, int numKnownSamples){
     for(int i = 0; i < numKnownSamples; i++){
         for(int i2 = 0; i2 < numAttributes; i2++ ){
             knowns[i][i2] =  (knowns[i][i2] - min[i2])/(max[i2]-min[i2]);
@@ -157,13 +157,13 @@ void normalize(double *min, double *max, double **knowns, int numAttributes, int
 }
 
 void outputParse(int numAttributes, int numKnownSamples, int numClass, 
-    int numUnknowns, int* min, int* max, int* classifications, double** knowns,
-    string* unknownNames, double** unknowns) {
+    int numUnknowns, float* min, float* max, int* classifications, float** knowns,
+    string* unknownNames, float** unknowns) {
     cout << numAttributes << " " << numKnownSamples <<  " " << numClass << " " 
         << numUnknowns << endl;
         
     for (int i = 0; i < numAttributes; i++) { 
-        cout << "min/max: " << min[i] << max[i] << endl;   
+        cout << "min/max: " << min[i] << " " << max[i] << endl;   
     }
     
     for (int i = 0; i < numKnownSamples; i++) {
@@ -180,20 +180,17 @@ void outputParse(int numAttributes, int numKnownSamples, int numClass,
             cout << unknowns[i][j] << " ";
         }
         cout << "\n";
-    }   
+    }
 }
 
 int main() {
     int numAttributes, numKnownSamples, numClass, numUnknowns;
-    double *min, *max;
-    double **knowns;
+    float *min, *max;
+    float **knowns;
     int *classifications;
-    double **unknowns;
+    float **unknowns;
     string *unknownNames;
     std::clock_t start;
-    double duration;
-    
-    
     
     parse(&numAttributes, &numKnownSamples, &numClass, &numUnknowns, 
         &min, &max, &knowns, &classifications, &unknowns, &unknownNames);
@@ -209,14 +206,14 @@ int main() {
    for (int cUn = 0; cUn < numUnknowns; cUn++) {
         DistClass* dc = find_distance (unknowns[cUn], knowns, classifications, 
             numAttributes, numKnownSamples);
-        for (int i = 0; i < numAttributes; i++) {
-            cout << dc[i] << " "; 
-        } cout << endl;
+        //for (int i = 0; i < numKnownSamples; i++) {
+        //    cout << dc[i].distance << " "; 
+        //} cout << endl;
         
         
-        /*for (int i = 0; i < numKnownSamples; i++) {
-            cout << dc[i].classif << " " << dc[i].distance << endl;
-        }*/
+        //for (int i = 0; i < numKnownSamples; i++) {
+        //    cout << dc[i].classif << " " << dc[i].distance << endl;
+        //}
         
         // Sort the distance objects
         sortDistances(dc, numKnownSamples);
@@ -230,7 +227,7 @@ int main() {
             
    }
    
-   duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC;
+   duration = ( std::clock() - start ) / (float) CLOCKS_PER_SEC;
    
    std::cout<<"printf: "<< duration <<'\n';
 }
