@@ -28,11 +28,11 @@
 // Different versions for the parallel algorithm
 #define RADIX_SORT 0
 #define THRUST_SORT 1
-#define SORT RADIX_SORT
+#define SORT THRUST_SORT
 
 #define DISTANCE_GATHER 0
 #define DISTANCE_MAPREDUCE 1
-#define DISTANCE DISTANCE_MAPREDUCE
+#define DISTANCE DISTANCE_GATHER
 
 using namespace std;
 
@@ -246,18 +246,13 @@ void sort(unsigned int* const d_inputVals,
                d_outputVals,d_outputClassification,
                numElems);
     } else if (SORT == THRUST_SORT) {
-        float *h_outputClassification = (float*) malloc(sizeof(float) * numElems);
-        float *h_outputVals = (float*) malloc(sizeof(float) * numElems);
-        cudaMemcpy(h_outputClassification, d_inputClassification, sizeof(float) * numElems, cudaMemcpyDeviceToHost);
-        cudaMemcpy(h_outputVals, d_inputVals, sizeof(float) * numElems, cudaMemcpyDeviceToHost);
+        thrust::device_ptr<unsigned int> t_outputClassification = thrust::device_pointer_cast(d_inputClassification);
+        thrust::device_ptr<unsigned int> t_outputVals = thrust::device_pointer_cast(d_inputVals);
         
-        thrust::sort_by_key(h_outputVals, h_outputVals + numElems, h_outputClassification);
+        thrust::sort_by_key(t_outputVals, t_outputVals + numElems, t_outputClassification);
         
-        cudaMemcpy(d_outputClassification, h_outputClassification, sizeof(float) * numElems, cudaMemcpyHostToDevice);
-        cudaMemcpy(d_outputVals, h_outputVals, sizeof(float) * numElems, cudaMemcpyHostToDevice);
-        
-        free(h_outputClassification);
-        free(h_outputVals);
+        cudaMemcpy(d_outputClassification, d_inputClassification, sizeof(float) * numElems, cudaMemcpyDeviceToDevice);
+        cudaMemcpy(d_outputVals, d_inputVals, sizeof(float) * numElems, cudaMemcpyDeviceToDevice);
     }
 }
 
@@ -506,10 +501,10 @@ int main() {
     
     totalDuration = ( std::clock() - start ) / (float) CLOCKS_PER_SEC;
     
-    std::cout<<"total Duration: "<< duration <<'\n';
-    cout << "normal duraton" <<  normalDuration;
-    cout << "distance duration" <<  distanceDuration ;
-    cout << "sort duration" <<  sortDuration;
-    cout << "majority duration" <<  majorityDuration ;
+    std::cout<<"total Duration: "<< totalDuration <<'\n';
+    cout << "normal duraton: " <<  normalDuration << endl;
+    cout << "distance duration: " <<  distanceDuration  << endl;
+    cout << "sort duration: " <<  sortDuration << endl;
+    cout << "majority duration: " <<  majorityDuration << endl ;
     
 }
